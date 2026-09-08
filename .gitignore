@@ -1,0 +1,86 @@
+# ================================
+# Python
+# ================================
+__pycache__/
+*.py[cod]
+*.pyo
+
+.venv/
+venv/
+env/
+ENV/
+
+.pytest_cache/
+.mypy_cache/
+
+# ================================
+# Node / Frontend
+# ================================
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# ================================
+# Environment variables
+# ================================
+.env
+.env.local
+.env.*.local
+
+# ================================
+# IDE / OS
+# ================================
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# ================================
+# Old Git backup
+# ================================
+.git_old/
+
+# ================================
+# Old Model 2 versions
+# ================================
+mastitis_model2_24h.pkl
+mastitis_model2_48h.pkl
+mastitis_model2_3d.pkl
+mastitis_model2_7d.pkl
+
+mastitis_model2_v2_*.pkl
+mastitis_model2_v3_*.pkl
+
+# ================================
+# Training / diagnostic outputs
+# ================================
+model1_diagnostic_results.csv
+model2_diagnostic_results.csv
+model2_results.csv
+model2_test_predictions.csv
+model2_v1_vs_v2_comparison.csv
+model2_v2_diagnostic_results.csv
+model2_v2_high_risk_analysis.csv
+model2_v2_high_risk_cases.csv
+model2_v2_results.csv
+model2_v2_risk_range_analysis.csv
+model2_v2_test_predictions.csv
+model2_v3_feature_importance.csv
+model2_v3_high_risk_analysis.csv
+model2_v3_longterm_analysis.csv
+model2_v3_results.csv
+model2_v3_test_predictions.csv
+model2_v4_feature_importance.csv
+model2_v4_results.csv
+model2_v4_test_predictions.csv
+model2_v4_threshold_analysis.csv
+model2_optimization_v5_results.csv
+model2_high_risk_predictions.csv
+
+# Intermediate forecasting datasets
+model2_forecasting_dataset.csv
+model2_forecasting_dataset_v2.csv
+model2_forecasting_dataset_v3.csv
+model2_v4_classification_dataset.csv
+herd_predictions.csv
