@@ -42,6 +42,11 @@ Thumbs.db
 .git_old/
 
 # ================================
+# Database
+# ================================
+backend/users.db
+
+# ================================
 # Old Model 2 versions
 # ================================
 mastitis_model2_24h.pkl
@@ -78,7 +83,9 @@ model2_v4_threshold_analysis.csv
 model2_optimization_v5_results.csv
 model2_high_risk_predictions.csv
 
+# ================================
 # Intermediate forecasting datasets
+# ================================
 model2_forecasting_dataset.csv
 model2_forecasting_dataset_v2.csv
 model2_forecasting_dataset_v3.csv
