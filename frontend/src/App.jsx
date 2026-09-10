@@ -61,6 +61,12 @@ function App() {
 
   const [lastUpdated, setLastUpdated] = useState(null);
 
+  /* ============================================================
+     SIDEBAR NAVIGATION
+  ============================================================ */
+
+  const [activeSection, setActiveSection] = useState("overview");
+
 
   /* ============================================================
      LOGIN SUCCESS
@@ -94,6 +100,36 @@ function App() {
     setHerdData(null);
     setPriorityData(null);
     setError("");
+  };
+
+
+  /* ============================================================
+     SIDEBAR NAVIGATION HANDLER
+  ============================================================ */
+
+  const handleNavigation = (section) => {
+
+    setActiveSection(section);
+
+    const sectionMap = {
+      overview: "overview-section",
+      priority: "priority-section",
+      alerts: "alerts-section",
+      sensors: "sensor-section",
+      models: "models-section",
+    };
+
+    const targetId = sectionMap[section];
+
+    const target = document.getElementById(targetId);
+
+    if (target) {
+
+      target.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
   };
 
 
@@ -174,7 +210,6 @@ function App() {
      
      IMPORTANT:
      useMemo MUST be called before the authentication return.
-     Otherwise React detects a change in Hook order.
   ============================================================ */
 
   const priorityCows = useMemo(() => {
@@ -507,13 +542,28 @@ function App() {
             MONITORING
           </div>
 
-          <button className="nav-item active">
+
+          <button
+            className={
+              activeSection === "overview"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => handleNavigation("overview")}
+          >
             <Gauge size={18} />
             <span>Overview</span>
           </button>
 
 
-          <button className="nav-item">
+          <button
+            className={
+              activeSection === "priority"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => handleNavigation("priority")}
+          >
 
             <Users size={18} />
 
@@ -528,7 +578,14 @@ function App() {
           </button>
 
 
-          <button className="nav-item">
+          <button
+            className={
+              activeSection === "alerts"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => handleNavigation("alerts")}
+          >
 
             <Bell size={18} />
 
@@ -544,7 +601,14 @@ function App() {
           </div>
 
 
-          <button className="nav-item">
+          <button
+            className={
+              activeSection === "sensors"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => handleNavigation("sensors")}
+          >
 
             <Wifi size={18} />
 
@@ -555,7 +619,14 @@ function App() {
           </button>
 
 
-          <button className="nav-item">
+          <button
+            className={
+              activeSection === "models"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => handleNavigation("models")}
+          >
 
             <Database size={18} />
 
@@ -645,9 +716,14 @@ function App() {
 
       <main className="main-content">
 
-        {/* HEADER */}
+        {/* =========================
+            OVERVIEW HEADER
+        ========================== */}
 
-        <header className="topbar">
+        <header
+          className="topbar"
+          id="overview-section"
+        >
 
           <div>
 
@@ -872,7 +948,10 @@ function App() {
             CURRENT RISK DISTRIBUTION
         ========================== */}
 
-        <section className="section">
+        <section
+          className="section"
+          id="models-section"
+        >
 
           <div className="section-heading">
 
@@ -1083,7 +1162,10 @@ function App() {
             PRIORITY COWS
         ========================== */}
 
-        <section className="section">
+        <section
+          className="section"
+          id="priority-section"
+        >
 
           <div className="section-heading">
 
@@ -1397,10 +1479,13 @@ function App() {
 
 
         {/* =========================
-            HIGH RISK COWS
+            HIGH RISK COWS / ALERTS
         ========================== */}
 
-        <section className="section">
+        <section
+          className="section"
+          id="alerts-section"
+        >
 
           <div className="section-heading">
 
@@ -1651,7 +1736,10 @@ function App() {
             DATA / SENSOR STATUS
         ========================== */}
 
-        <section className="section">
+        <section
+          className="section"
+          id="sensor-section"
+        >
 
           <div className="section-heading">
 
