@@ -108,21 +108,6 @@ humidity = prompt_float(
     min_val=0.0, max_val=100.0
 )
 
-previous_mastitis = prompt_choice(
-    "7. Previous mastitis history (0 = No, 1 = Yes): ",
-    choices=[0, 1]
-)
-
-# LOGICAL FIX FOR PREVIOUS MASTITIS == 0
-if previous_mastitis == 0:
-    print("  --> Cow has no previous mastitis history (setting days since last mastitis = -1).")
-    days_since_last_mastitis = -1.0
-else:
-    days_since_last_mastitis = prompt_float(
-        "8. Days since last mastitis (0 or greater): ",
-        min_val=0.0, max_val=3650.0
-    )
-
 
 # ============================================================
 # 4. CREATE INPUT DATAFRAME
@@ -134,9 +119,7 @@ input_data = pd.DataFrame([{
     "cow_activity": cow_activity,
     "environment_temperature_c": environment_temperature,
     "milk_temperature_c": milk_temperature,
-    "humidity_percent": humidity,
-    "previous_mastitis": previous_mastitis,
-    "days_since_last_mastitis": days_since_last_mastitis
+    "humidity_percent": humidity
 }])
 
 

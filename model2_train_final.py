@@ -29,7 +29,7 @@ warnings.filterwarnings("ignore")
 # CONFIGURATION
 # ============================================================
 
-BASE_DIR = r"D:\Mastitis"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DATASET = os.path.join(
     BASE_DIR,

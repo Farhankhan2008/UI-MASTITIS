@@ -1,2217 +1,598 @@
-import { useEffect, useMemo, useState } from "react";
-import { getHerdRisk, getPriorityCows } from "./services/api";
+import { useState, useEffect, useMemo } from "react";
 import Login from "./components/Login";
-
+import CowDetails from "./components/CowDetails";
+import VetFinder from "./components/VetFinder";
+import { translations } from "./i18n/translations";
+import { getHerdRisk } from "./services/api";
 import {
+  ShieldAlert,
   Activity,
-  AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  BarChart3,
-  Bell,
-  CheckCircle2,
-  ChevronRight,
-  CircleAlert,
-  Clock3,
-  Cloud,
-  Database,
-  Droplets,
-  Eye,
-  Gauge,
-  HeartPulse,
-  Leaf,
-  LogOut,
-  RefreshCw,
   Search,
-  ShieldCheck,
-  Thermometer,
-  TrendingUp,
-  User as UserIcon,
-  Users,
-  Wifi,
-  XCircle,
+  RefreshCw,
+  LogOut,
+  LayoutDashboard,
+  Stethoscope,
+  Settings,
+  AlertTriangle,
+  AlertCircle,
+  Eye,
+  CheckCircle2,
+  Globe,
+  X
 } from "lucide-react";
-
 import "./App.css";
 
+export default function App() {
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem("mastitis_user");
+    return saved ? JSON.parse(saved) : null;
+  });
 
-function App() {
-
-  /* ============================================================
-     AUTHENTICATION
-  ============================================================ */
-
-  const [isAuthenticated, setIsAuthenticated] = useState(
-    () => Boolean(localStorage.getItem("token"))
-  );
-
-  const [username, setUsername] = useState(
-    () => localStorage.getItem("username") || ""
-  );
-
-  const [herdData, setHerdData] = useState(null);
-  const [priorityData, setPriorityData] = useState(null);
-
+  const [herdData, setHerdData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const [error, setError] = useState("");
-
   const [searchTerm, setSearchTerm] = useState("");
-  const [riskFilter, setRiskFilter] = useState("ALL");
+  const [selectedCowId, setSelectedCowId] = useState(null);
+  const [activeView, setActiveView] = useState("herd"); // 'herd' | 'cow_details' | 'vet_finder'
+  const [activeSection, setActiveSection] = useState(null); // 'sec-priority-high' | 'sec-mod-attention' | 'sec-under-monitor' | 'sec-healthy-cows'
+  const [inspectedCows, setInspectedCows] = useState(new Set());
 
-  const [lastUpdated, setLastUpdated] = useState(null);
+  // Multilingual state (default: English)
+  const [lang, setLang] = useState(() => localStorage.getItem("mastitis_lang") || "en");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  /* ============================================================
-     SIDEBAR NAVIGATION
-  ============================================================ */
+  const t = translations[lang] || translations.en;
 
-  const [activeSection, setActiveSection] = useState("overview");
-
-
-  /* ============================================================
-     LOGIN SUCCESS
-  ============================================================ */
-
-  const handleLogin = (data) => {
-
-    setIsAuthenticated(true);
-
-    setUsername(
-      data.username ||
-      localStorage.getItem("username") ||
-      ""
-    );
+  const handleCategoryClick = (sectionId) => {
+    setActiveView("herd");
+    setSelectedCowId(null);
+    setActiveSection(sectionId);
+    setTimeout(() => {
+      const el = document.getElementById(sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
   };
 
-
-  /* ============================================================
-     LOGOUT
-  ============================================================ */
-
-  const handleLogout = () => {
-
-    localStorage.removeItem("token");
-    localStorage.removeItem("username");
-    localStorage.removeItem("role");
-
-    setIsAuthenticated(false);
-    setUsername("");
-
-    setHerdData(null);
-    setPriorityData(null);
-    setError("");
+  const handleSetLang = (newLang) => {
+    setLang(newLang);
+    localStorage.setItem("mastitis_lang", newLang);
   };
 
-
-  /* ============================================================
-     SIDEBAR NAVIGATION HANDLER
-  ============================================================ */
-
-  const handleNavigation = (section) => {
-
-    setActiveSection(section);
-
-    const sectionMap = {
-      overview: "overview-section",
-      priority: "priority-section",
-      alerts: "alerts-section",
-      sensors: "sensor-section",
-      models: "models-section",
-    };
-
-    const targetId = sectionMap[section];
-
-    const target = document.getElementById(targetId);
-
-    if (target) {
-
-      target.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+  const fetchHerd = async () => {
+    setLoading(true);
+    try {
+      const data = await getHerdRisk();
+      if (data && data.priority_cows) {
+        setHerdData(data.priority_cows);
+      }
+    } catch (e) {
+      console.error("Failed to connect to backend engine:", e);
+    } finally {
+      setLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (user) {
+      fetchHerd();
+    }
+  }, [user]);
 
-  /* ============================================================
-     DASHBOARD API
-  ============================================================ */
+  // Scroll-Spy Effect: Automatically update sidebar active item as user scrolls
+  useEffect(() => {
+    if (activeView !== "herd" || selectedCowId) return;
 
-  const loadDashboard = async (isRefresh = false) => {
+    const sectionIds = [
+      "sec-priority-high",
+      "sec-mod-attention",
+      "sec-under-monitor",
+      "sec-healthy-cows"
+    ];
 
-    try {
+    const handleScroll = () => {
+      const scrollPos = window.scrollY;
 
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
-      setError("");
-
-      const [herdResult, priorityResult] = await Promise.all([
-        getHerdRisk(),
-        getPriorityCows(),
-      ]);
-
-      setHerdData(herdResult);
-      setPriorityData(priorityResult);
-
-      setLastUpdated(new Date());
-
-    } catch (err) {
-
-      console.error("Dashboard loading error:", err);
-
-      /*
-       * If JWT is invalid or expired,
-       * send the user back to login.
-       */
-
-      if (
-        err.message?.includes("401") ||
-        err.message?.toLowerCase().includes("unauthorized")
-      ) {
-
-        handleLogout();
-
+      // Top of page highlights Herd Overview
+      if (scrollPos < 260) {
+        setActiveSection(null);
         return;
       }
 
-      setError(
-        "Unable to connect to the Mastitis AI backend. Make sure the FastAPI server is running on port 8000."
-      );
+      let currentSection = null;
+      for (let i = sectionIds.length - 1; i >= 0; i--) {
+        const el = document.getElementById(sectionIds[i]);
+        if (el) {
+          const top = el.offsetTop - 160;
+          if (scrollPos >= top) {
+            currentSection = sectionIds[i];
+            break;
+          }
+        }
+      }
 
-    } finally {
-
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-
-  /* ============================================================
-     LOAD DASHBOARD ONLY AFTER LOGIN
-  ============================================================ */
-
-  useEffect(() => {
-
-    if (!isAuthenticated) {
-      return;
-    }
-
-    loadDashboard();
-
-  }, [isAuthenticated]);
-
-
-  /* ============================================================
-     FILTER PRIORITY COWS
-     
-     IMPORTANT:
-     useMemo MUST be called before the authentication return.
-  ============================================================ */
-
-  const priorityCows = useMemo(() => {
-
-    if (!priorityData?.priority_cows) {
-      return [];
-    }
-
-    let cows = [...priorityData.priority_cows];
-
-    if (searchTerm.trim()) {
-
-      const search = searchTerm.toLowerCase();
-
-      cows = cows.filter((cow) =>
-        String(cow.cow_id || "")
-          .toLowerCase()
-          .includes(search)
-      );
-    }
-
-    if (riskFilter !== "ALL") {
-
-      cows = cows.filter(
-        (cow) =>
-          String(cow.risk_category || "").toUpperCase() === riskFilter
-      );
-    }
-
-    return cows;
-
-  }, [priorityData, searchTerm, riskFilter]);
-
-
-  /* ============================================================
-     SHOW LOGIN PAGE
-     
-     This MUST come AFTER all Hooks.
-  ============================================================ */
-
-  if (!isAuthenticated) {
-
-    return (
-      <Login onLogin={handleLogin} />
-    );
-  }
-
-
-  /* ============================================================
-     RISK HELPERS
-  ============================================================ */
-
-  const getRiskClass = (category = "") => {
-
-    const value = category.toLowerCase();
-
-    if (value.includes("high")) {
-      return "risk-high";
-    }
-
-    if (value.includes("moderate")) {
-      return "risk-moderate";
-    }
-
-    if (value.includes("low")) {
-      return "risk-low";
-    }
-
-    return "risk-safe";
-  };
-
-
-  const getRiskIcon = (category = "") => {
-
-    const value = category.toLowerCase();
-
-    if (value.includes("high")) {
-      return <AlertTriangle size={15} />;
-    }
-
-    if (value.includes("moderate")) {
-      return <CircleAlert size={15} />;
-    }
-
-    if (value.includes("low")) {
-      return <Activity size={15} />;
-    }
-
-    return <CheckCircle2 size={15} />;
-  };
-
-
-  const getTrend = (cow) => {
-
-    const current = Number(cow.current_risk || 0);
-    const forecast7 = Number(cow["7d_probability"] || 0);
-
-    if (forecast7 > current + 5) {
-
-      return {
-        label: "Increasing",
-        className: "trend-up",
-        icon: <ArrowUp size={14} />,
-      };
-    }
-
-    if (forecast7 < current - 5) {
-
-      return {
-        label: "Decreasing",
-        className: "trend-down",
-        icon: <ArrowDown size={14} />,
-      };
-    }
-
-    return {
-      label: "Stable",
-      className: "trend-stable",
-      icon: <Activity size={14} />,
+      if (currentSection) {
+        setActiveSection(currentSection);
+      }
     };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [activeView, selectedCowId]);
+
+  const handleLogin = (userData) => {
+    setUser(userData);
+    localStorage.setItem("mastitis_user", JSON.stringify(userData));
   };
 
-
-  const formatPercentage = (value) => {
-
-    if (
-      value === null ||
-      value === undefined ||
-      Number.isNaN(Number(value))
-    ) {
-      return "--";
-    }
-
-    return `${Number(value).toFixed(1)}%`;
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem("mastitis_user");
   };
 
+  // Restructured cow groups by risk tier
+  const priorityHighCows = useMemo(() => {
+    return herdData.filter((c) => c.risk_category === "High Risk" || c.current_risk >= 70);
+  }, [herdData]);
 
-  const formatNumber = (value) => {
+  const modDiseaseCows = useMemo(() => {
+    return herdData.filter((c) => c.risk_category === "Moderate Risk" || (c.current_risk >= 40 && c.current_risk < 70));
+  }, [herdData]);
 
-    if (
-      value === null ||
-      value === undefined ||
-      Number.isNaN(Number(value))
-    ) {
-      return "--";
-    }
+  const underMonitorCows = useMemo(() => {
+    return herdData.filter((c) => c.risk_category === "Low Risk" || (c.current_risk >= 20 && c.current_risk < 40));
+  }, [herdData]);
 
-    return Number(value).toFixed(2);
+  const healthyCows = useMemo(() => {
+    return herdData.filter((c) => c.risk_category === "Healthy" || c.current_risk < 20);
+  }, [herdData]);
+
+  // Filter search handling
+  const isSearchActive = searchTerm.trim().length > 0;
+  const searchedCow = useMemo(() => {
+    if (!isSearchActive) return null;
+    const clean = searchTerm.trim().toUpperCase();
+    return herdData.find((c) => c.cow_id.toUpperCase() === clean);
+  }, [searchTerm, herdData, isSearchActive]);
+
+  const isCowNotFound = isSearchActive && !searchedCow;
+
+  const selectedCow = useMemo(() => {
+    if (!selectedCowId) return null;
+    return herdData.find((c) => c.cow_id === selectedCowId);
+  }, [selectedCowId, herdData]);
+
+  const toggleInspection = (id, e) => {
+    e.stopPropagation();
+    setInspectedCows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
-
-  const getHerdStatusClass = (status = "") => {
-
-    const value = status.toLowerCase();
-
-    if (value === "high") {
-      return "status-high";
-    }
-
-    if (value === "moderate") {
-      return "status-moderate";
-    }
-
-    if (value === "low") {
-      return "status-low";
-    }
-
-    return "status-normal";
-  };
-
-
-  const getStatusDescription = (status = "") => {
-
-    const value = status.toLowerCase();
-
-    if (value === "high") {
-      return "Multiple herd-level risk indicators require attention.";
-    }
-
-    if (value === "moderate") {
-      return "Some herd-level indicators require increased monitoring.";
-    }
-
-    if (value === "low") {
-      return "Risk indicators are present but remain limited.";
-    }
-
-    return "No significant herd-level risk indicators detected.";
-  };
-
-
-  const getRecommendationIcon = (recommendation = "") => {
-
-    const value = recommendation.toLowerCase();
-
-    if (
-      value.includes("high-risk") ||
-      value.includes("priority")
-    ) {
-      return <AlertTriangle size={18} />;
-    }
-
-    if (value.includes("monitor")) {
-      return <Eye size={18} />;
-    }
-
-    if (value.includes("review")) {
-      return <BarChart3 size={18} />;
-    }
-
-    return <ShieldCheck size={18} />;
-  };
-
-
-  /* ============================================================
-     LOADING
-  ============================================================ */
-
-  if (loading) {
-
-    return (
-      <div className="app-loading">
-
-        <div className="loading-card">
-
-          <div className="loading-logo">
-            <HeartPulse size={28} />
-          </div>
-
-          <h1>Mastitis AI</h1>
-
-          <p>Loading herd intelligence...</p>
-
-          <div className="loading-spinner">
-            <RefreshCw size={20} />
-          </div>
-
-        </div>
-
-      </div>
-    );
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
   }
 
-
-  /* ============================================================
-     ERROR
-  ============================================================ */
-
-  if (error && !herdData) {
+  const renderCowCard = (cow) => {
+    const isHigh = cow.risk_category === "High Risk" || cow.current_risk >= 70;
+    const isMod = cow.risk_category === "Moderate Risk" || (cow.current_risk >= 40 && cow.current_risk < 70);
+    const isLow = cow.risk_category === "Low Risk" || (cow.current_risk >= 20 && cow.current_risk < 40);
 
     return (
-      <div className="app-error">
-
-        <div className="error-card">
-
-          <div className="error-icon">
-            <XCircle size={30} />
+      <div
+        key={cow.cow_id}
+        className={`cow-card glassmorphism ${isHigh ? "card-high" : isMod ? "card-mod" : isLow ? "card-low" : "card-healthy"}`}
+        onClick={() => {
+          setSelectedCowId(cow.cow_id);
+          setActiveView("cow_details");
+        }}
+      >
+        <div className="cow-card-header">
+          <div className="cow-identity">
+            <div className="cow-avatar">
+              <Activity size={18} />
+            </div>
+            <div>
+              <h4>{cow.cow_id}</h4>
+              <span className="cow-breed">{cow.breed}</span>
+            </div>
           </div>
+          <span className={`risk-badge ${isHigh ? "badge-high" : isMod ? "badge-mod" : isLow ? "badge-low" : "badge-healthy"}`}>
+            {cow.risk_category}
+          </span>
+        </div>
 
-          <h1>Backend connection failed</h1>
+        <div className="risk-meter-container">
+          <div className="risk-meter-header">
+            <span>Risk Score</span>
+            <strong>{cow.current_risk}%</strong>
+          </div>
+          <div className="risk-track">
+            <div
+              className={`risk-fill ${isHigh ? "fill-high" : isMod ? "fill-mod" : isLow ? "fill-low" : "fill-healthy"}`}
+              style={{ width: `${Math.min(100, cow.current_risk)}%` }}
+            ></div>
+          </div>
+        </div>
 
-          <p>{error}</p>
+        {/* 4 PREDICTION HORIZONS */}
+        <div className="prediction-grid-4">
+          <div className="p-box">
+            <span className="p-label">24h</span>
+            <span className="p-val">{cow.risk_24h || cow.current_risk}%</span>
+          </div>
+          <div className="p-box">
+            <span className="p-label">48h</span>
+            <span className="p-val">{cow.risk_48h || cow.risk_24h}%</span>
+          </div>
+          <div className="p-box">
+            <span className="p-label">3d</span>
+            <span className="p-val">{cow.risk_3d || cow.risk_48h}%</span>
+          </div>
+          <div className="p-box">
+            <span className="p-label">14d</span>
+            <span className="p-val">{cow["14d_probability"] || cow["7d_probability"]}%</span>
+          </div>
+        </div>
 
+        <div className="cow-card-footer">
           <button
-            className="primary-button"
-            onClick={() => loadDashboard()}
+            className={`inspection-btn ${inspectedCows.has(cow.cow_id) ? "done" : ""}`}
+            onClick={(e) => toggleInspection(cow.cow_id, e)}
           >
-            <RefreshCw size={17} />
-            Try again
+            {inspectedCows.has(cow.cow_id) ? "Inspected" : "Mark Inspected"}
           </button>
-
-          <div className="connection-help">
-
-            <strong>Backend command:</strong>
-
-            <code>
-              python -m uvicorn main:app --reload
-            </code>
-
-          </div>
-
+          <span className="details-link">{t.graph_details}</span>
         </div>
-
       </div>
     );
-  }
-
-
-  const status = herdData?.herd_status || "UNKNOWN";
-
-
-  /* ============================================================
-     DASHBOARD
-  ============================================================ */
+  };
 
   return (
-
     <div className="app">
-
-      {/* =========================
-          SIDEBAR
-      ========================== */}
-
+      {/* SIDEBAR NAVIGATION - ONLY 2 MAIN SUBPAGES + SETTINGS */}
       <aside className="sidebar">
-
         <div className="brand">
-
           <div className="brand-icon">
-            <HeartPulse size={23} />
+            <ShieldAlert size={26} />
           </div>
-
           <div>
-
-            <div className="brand-name">
-              Mastitis AI
-            </div>
-
-            <div className="brand-subtitle">
-              Dairy Intelligence
-            </div>
-
+            <div className="brand-name">{t.brand_name}</div>
+            <div className="brand-subtitle">{t.brand_subtitle}</div>
           </div>
-
         </div>
-
 
         <nav className="sidebar-nav">
-
-          <div className="nav-section-title">
-            MONITORING
-          </div>
-
-
+          <div className="nav-section-title">{t.herd_monitoring}</div>
           <button
-            className={
-              activeSection === "overview"
-                ? "nav-item active"
-                : "nav-item"
-            }
-            onClick={() => handleNavigation("overview")}
+            className={`nav-item ${activeView === "herd" && !activeSection ? "active" : ""}`}
+            onClick={() => {
+              setActiveView("herd");
+              setSelectedCowId(null);
+              setActiveSection(null);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
           >
-            <Gauge size={18} />
-            <span>Overview</span>
+            <LayoutDashboard size={18} />
+            <span>{t.herd_overview}</span>
           </button>
 
-
+          {/* 1. HIGH RISK / PRIORITY HIGH */}
           <button
-            className={
-              activeSection === "priority"
-                ? "nav-item active"
-                : "nav-item"
-            }
-            onClick={() => handleNavigation("priority")}
+            className={`nav-item ${activeSection === "sec-priority-high" ? "active" : ""}`}
+            onClick={() => handleCategoryClick("sec-priority-high")}
           >
-
-            <Users size={18} />
-
-            <span>
-              Priority Cows
-            </span>
-
-            <span className="nav-count">
-              {herdData?.high_risk_count ?? 0}
-            </span>
-
+            <AlertTriangle size={18} className="text-red" />
+            <span>{t.priority_cows_title}</span>
+            <span className="sidebar-badge badge-high">{priorityHighCows.length}</span>
           </button>
 
-
+          {/* 2. MODERATE RISK / NEED ATTENTION */}
           <button
-            className={
-              activeSection === "alerts"
-                ? "nav-item active"
-                : "nav-item"
-            }
-            onClick={() => handleNavigation("alerts")}
+            className={`nav-item ${activeSection === "sec-mod-attention" ? "active" : ""}`}
+            onClick={() => handleCategoryClick("sec-mod-attention")}
           >
-
-            <Bell size={18} />
-
-            <span>
-              Alerts
-            </span>
-
+            <AlertCircle size={18} className="text-amber" />
+            <span>{t.mod_disease_title}</span>
+            <span className="sidebar-badge badge-mod">{modDiseaseCows.length}</span>
           </button>
 
-
-          <div className="nav-section-title">
-            SYSTEM
-          </div>
-
-
+          {/* 3. LOW RISK / UNDER MONITOR */}
           <button
-            className={
-              activeSection === "sensors"
-                ? "nav-item active"
-                : "nav-item"
-            }
-            onClick={() => handleNavigation("sensors")}
+            className={`nav-item ${activeSection === "sec-under-monitor" ? "active" : ""}`}
+            onClick={() => handleCategoryClick("sec-under-monitor")}
           >
-
-            <Wifi size={18} />
-
-            <span>
-              Sensor Monitor
-            </span>
-
+            <Eye size={18} className="text-blue" />
+            <span>{t.under_monitor_title}</span>
+            <span className="sidebar-badge badge-low">{underMonitorCows.length}</span>
           </button>
 
-
+          {/* 4. HEALTHY COWS */}
           <button
-            className={
-              activeSection === "models"
-                ? "nav-item active"
-                : "nav-item"
-            }
-            onClick={() => handleNavigation("models")}
+            className={`nav-item ${activeSection === "sec-healthy-cows" ? "active" : ""}`}
+            onClick={() => handleCategoryClick("sec-healthy-cows")}
           >
-
-            <Database size={18} />
-
-            <span>
-              Data & Models
-            </span>
-
+            <CheckCircle2 size={18} className="text-emerald" />
+            <span>{t.healthy_cows_title}</span>
+            <span className="sidebar-badge badge-healthy">{healthyCows.length}</span>
           </button>
 
+          {/* NEARBY VET DOCTORS */}
+          <button
+            className={`nav-item ${activeView === "vet_finder" ? "active" : ""}`}
+            onClick={() => {
+              setActiveView("vet_finder");
+              setSelectedCowId(null);
+              setActiveSection(null);
+            }}
+          >
+            <Stethoscope size={18} />
+            <span>{t.nearby_vets}</span>
+          </button>
         </nav>
 
-
-        {/* =========================
-            SIDEBAR BOTTOM
-        ========================== */}
-
         <div className="sidebar-bottom">
+          <button className="nav-item settings-bottom-btn" onClick={() => setIsSettingsOpen(true)}>
+            <Settings size={18} />
+            <span>{t.settings}</span>
+          </button>
 
-          <div className="prototype-badge">
-
-            <div className="prototype-dot"></div>
-
-            <div>
-
-              <strong>
-                Prototype Mode
-              </strong>
-
-              <span>
-                Model outputs connected
-              </span>
-
+          <div className="user-profile-badge">
+            <div className="user-avatar">{(user.name || user.username || "F").charAt(0).toUpperCase()}</div>
+            <div className="user-info">
+              <span className="user-name">{user.name || user.username || "Farmer"}</span>
+              <span className="user-role">{user.role || "farmer"}</span>
             </div>
-
-          </div>
-
-
-          {/* USER INFORMATION */}
-
-          <div className="sidebar-user">
-
-            <div className="sidebar-user-info">
-
-              <div className="sidebar-user-icon">
-                <UserIcon />
-              </div>
-
-              <div>
-
-                <strong>
-                  {username || "User"}
-                </strong>
-
-                <span>
-                  {localStorage.getItem("role") || "farmer"}
-                </span>
-
-              </div>
-
-            </div>
-
-
-            <button
-              className="logout-button"
-              onClick={handleLogout}
-              title="Logout"
-            >
-              <LogOut size={17} />
-              Logout
+            <button className="logout-btn" onClick={handleLogout} title="Logout">
+              <LogOut size={16} />
             </button>
-
           </div>
-
-
-          <div className="sidebar-footer">
-            Monitor → Detect → Forecast
-          </div>
-
         </div>
-
       </aside>
 
-
-      {/* =========================
-          MAIN CONTENT
-      ========================== */}
-
+      {/* MAIN CONTENT AREA */}
       <main className="main-content">
-
-        {/* =========================
-            OVERVIEW HEADER
-        ========================== */}
-
-        <header
-          className="topbar"
-          id="overview-section"
-        >
-
+        {/* TOPBAR */}
+        <header className="topbar">
           <div>
-
             <div className="breadcrumb">
-              Dairy Intelligence / Overview
+              {t.brand_name.toUpperCase()} /{" "}
+              {activeView === "cow_details" ? "COW ANALYTICS" : activeView === "vet_finder" ? "VET DIRECTORY" : "HERD OVERVIEW"}
             </div>
-
             <h1>
-              Herd Overview
+              {activeView === "cow_details"
+                ? `${selectedCowId} Analytics`
+                : activeView === "vet_finder"
+                  ? t.vet_finder_title
+                  : t.herd_overview}
             </h1>
-
-            <p className="page-description">
-              AI-powered early risk monitoring and forecasting for bovine
-              mastitis.
-            </p>
-
           </div>
-
 
           <div className="topbar-actions">
-
-            <div className="system-status">
-
-              <span className="online-dot"></span>
-
-              AI system online
-
-            </div>
-
-
-            <button
-              className="refresh-button"
-              onClick={() => loadDashboard(true)}
-              disabled={refreshing}
-              title="Refresh dashboard"
-            >
-
-              <RefreshCw
-                size={17}
-                className={refreshing ? "spin" : ""}
-              />
-
-              Refresh
-
+            {/* LANGUAGE INDICATOR */}
+            <button className="lang-indicator-btn" onClick={() => setIsSettingsOpen(true)}>
+              <Globe size={16} /> {lang.toUpperCase()}
             </button>
 
-          </div>
+            <div className="system-status">
+              <span className="online-dot"></span>
+              {t.cows_online}
+            </div>
 
+            <button className="refresh-button" onClick={fetchHerd} disabled={loading}>
+              <RefreshCw size={14} className={loading ? "spin" : ""} />
+              {t.refresh_data}
+            </button>
+          </div>
         </header>
 
+        {/* VIEW ROUTING */}
+        {activeView === "cow_details" && selectedCow ? (
+          <CowDetails
+            cow={selectedCow}
+            lang={lang}
+            t={t}
+            onBack={() => {
+              setActiveView("herd");
+              setSelectedCowId(null);
+            }}
+            onNavigateToVets={() => {
+              setActiveView("vet_finder");
+              setSelectedCowId(null);
+            }}
+          />
+        ) : activeView === "vet_finder" ? (
+          <VetFinder lang={lang} t={t} />
+        ) : (
+          <div>
+            {/* SUMMARY METRICS HEADER - SHOWS ONLY HERD RISK %, TOTAL COWS, & BREAKDOWN */}
+            <div className="section">
+              <div className="hero-status-grid">
+                <div className="herd-status-card glassmorphism status-high featured-risk-card">
+                  <div className="status-card-top">
+                    <span className="featured-badge"><AlertTriangle size={14} /> {t.herd_risk_level}</span>
+                    <span className="risk-tag-high">CRITICAL ALERT</span>
+                  </div>
+                  <div className="status-value-row">
+                    <div className="status-value">HIGH (78%)</div>
+                    <div className="status-sub-metric">{priorityHighCows.length} Cows At Risk</div>
+                  </div>
+                  <div className="status-progress-track">
+                    <div className="status-progress-fill" style={{ width: '78%' }}></div>
+                  </div>
+                  <div className="status-caption">
+                    {priorityHighCows.length} {t.herd_risk_desc}
+                  </div>
+                </div>
 
-        {/* ERROR BANNER */}
+                <div className="metric-card glassmorphism card-shadow-grey">
+                  <span className="metric-label">{t.total_herd}</span>
+                  <div className="metric-value">100</div>
+                  <span className="metric-caption">{t.monitored_cows}</span>
+                </div>
 
-        {error && (
+                <div className="metric-card glassmorphism card-shadow-red">
+                  <span className="metric-label">{t.high_risk}</span>
+                  <div className="metric-value text-red">{priorityHighCows.length}</div>
+                  <span className="metric-caption">Risk ≥ 70%</span>
+                </div>
 
-          <div className="warning-banner">
+                <div className="metric-card glassmorphism card-shadow-yellow">
+                  <span className="metric-label">{t.mod_risk}</span>
+                  <div className="metric-value text-amber">{modDiseaseCows.length}</div>
+                  <span className="metric-caption">40% - 69% Risk</span>
+                </div>
 
-            <AlertTriangle size={18} />
+                <div className="metric-card glassmorphism card-shadow-blue">
+                  <span className="metric-label">{t.low_risk}</span>
+                  <div className="metric-value text-blue">{underMonitorCows.length}</div>
+                  <span className="metric-caption">20% - 39% Risk</span>
+                </div>
 
-            <div>
-
-              <strong>
-                Connection warning
-              </strong>
-
-              <span>
-                {error}
-              </span>
-
+                <div className="metric-card glassmorphism card-shadow-green">
+                  <span className="metric-label">{t.healthy_label}</span>
+                  <div className="metric-value text-emerald">{healthyCows.length}</div>
+                  <span className="metric-caption">Risk &lt; 20%</span>
+                </div>
+              </div>
             </div>
 
-          </div>
+            {/* SEARCH & FILTER BAR FOR ALL 100 COWS */}
+            <div className="section">
+              <div className="filter-bar glassmorphism">
+                <div className="search-box">
+                  <Search size={18} className="text-muted" />
+                  <input
+                    type="text"
+                    placeholder={t.search_placeholder}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+              </div>
 
+              {/* NON-EXISTENT COW ERROR BANNER */}
+              {isCowNotFound && (
+                <div className="not-found-banner glassmorphism">
+                  <AlertTriangle size={24} className="text-red" />
+                  <div>
+                    <h3>Cow &quot;{searchTerm.trim()}&quot; {t.not_exist_title}</h3>
+                    <p>{t.not_exist_desc}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* IF SEARCHING SPECIFIC COW */}
+            {isSearchActive && searchedCow ? (
+              <div className="section">
+                <div className="section-heading">
+                  <h2>Search Result for {searchedCow.cow_id}</h2>
+                </div>
+                <div className="cow-grid">{renderCowCard(searchedCow)}</div>
+              </div>
+            ) : !isSearchActive ? (
+              /* RESTRUCTURED 4 CATEGORIZED SECTIONS */
+              <div className="section">
+                {/* 1. PRIORITY COWS SECTION (HIGH RISK) */}
+                <div id="sec-priority-high" className="herd-sub-section">
+                  <div className="section-heading">
+                    <span className="section-kicker text-red">🔴 CATEGORY 1</span>
+                    <h2>{t.priority_cows_title} ({priorityHighCows.length})</h2>
+                    <p className="page-description">{t.priority_cows_desc}</p>
+                  </div>
+                  <div className="cow-grid">
+                    {priorityHighCows.map((cow) => renderCowCard(cow))}
+                  </div>
+                </div>
+
+                {/* 2. HIGH POTENTIAL FOR DISEASE SECTION (MODERATE RISK) */}
+                <div id="sec-mod-attention" className="herd-sub-section margin-top-lg">
+                  <div className="section-heading">
+                    <span className="section-kicker text-amber">🟠 CATEGORY 2</span>
+                    <h2>{t.mod_disease_title} ({modDiseaseCows.length})</h2>
+                    <p className="page-description">{t.mod_disease_desc}</p>
+                  </div>
+                  <div className="cow-grid">
+                    {modDiseaseCows.map((cow) => renderCowCard(cow))}
+                  </div>
+                </div>
+
+                {/* 3. UNDER MONITOR SECTION (LOW RISK) */}
+                <div id="sec-under-monitor" className="herd-sub-section margin-top-lg">
+                  <div className="section-heading">
+                    <span className="section-kicker text-blue">🟡 CATEGORY 3</span>
+                    <h2>{t.under_monitor_title} ({underMonitorCows.length})</h2>
+                    <p className="page-description">{t.under_monitor_desc}</p>
+                  </div>
+                  <div className="cow-grid">
+                    {underMonitorCows.map((cow) => renderCowCard(cow))}
+                  </div>
+                </div>
+
+                {/* 4. HEALTHY COWS SECTION */}
+                <div id="sec-healthy-cows" className="herd-sub-section margin-top-lg">
+                  <div className="section-heading">
+                    <span className="section-kicker text-emerald">🟢 CATEGORY 4</span>
+                    <h2>{t.healthy_cows_title} ({healthyCows.length})</h2>
+                    <p className="page-description">{t.healthy_cows_desc}</p>
+                  </div>
+                  <div className="cow-grid">
+                    {healthyCows.map((cow) => renderCowCard(cow))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
         )}
 
-
-        {/* =========================
-            CURRENT HERD STATUS
-        ========================== */}
-
-        <section className="section">
-
-          <div className="section-heading">
-
-            <div>
-
-              <span className="section-kicker">
-                CURRENT HERD STATUS
-              </span>
-
-              <h2>
-                How is the herd right now?
-              </h2>
-
-            </div>
-
-
-            <div className="last-updated">
-
-              <Clock3 size={15} />
-
-              Last updated{" "}
-
-              {lastUpdated
-                ? lastUpdated.toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-                : "--"}
-
-            </div>
-
-          </div>
-
-
-          <div className="hero-status-grid">
-
-            <div
-              className={`herd-status-card ${getHerdStatusClass(status)}`}
-            >
-
-              <div className="status-card-top">
-
-                <span>
-                  HERD STATUS
-                </span>
-
-                <div className="status-icon">
-
-                  {status === "HIGH" ? (
-                    <AlertTriangle size={23} />
-                  ) : status === "MODERATE" ? (
-                    <CircleAlert size={23} />
-                  ) : (
-                    <ShieldCheck size={23} />
-                  )}
-
-                </div>
-
-              </div>
-
-
-              <div className="status-value">
-                {status}
-              </div>
-
-              <p>
-                {getStatusDescription(status)}
-              </p>
-
-            </div>
-
-
-            <div className="metric-card">
-
-              <div className="metric-icon">
-                <Users size={21} />
-              </div>
-
-              <div className="metric-label">
-                TOTAL COWS
-              </div>
-
-              <div className="metric-value">
-                {herdData?.total_cows ?? "--"}
-              </div>
-
-              <div className="metric-caption">
-                Animals monitored
-              </div>
-
-            </div>
-
-
-            <div className="metric-card">
-
-              <div className="metric-icon">
-                <Activity size={21} />
-              </div>
-
-              <div className="metric-label">
-                AVERAGE CURRENT RISK
-              </div>
-
-              <div className="metric-value">
-                {formatPercentage(herdData?.average_risk)}
-              </div>
-
-              <div className="metric-caption">
-                Model 1 herd average
-              </div>
-
-            </div>
-
-
-            <div className="metric-card">
-
-              <div className="metric-icon">
-                <AlertTriangle size={21} />
-              </div>
-
-              <div className="metric-label">
-                HIGH-RISK COWS
-              </div>
-
-              <div className="metric-value">
-                {herdData?.high_risk_count ?? "--"}
-              </div>
-
-              <div className="metric-caption">
-                Current risk ≥ high-risk threshold
-              </div>
-
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* =========================
-            CURRENT RISK DISTRIBUTION
-        ========================== */}
-
-        <section
-          className="section"
-          id="models-section"
-        >
-
-          <div className="section-heading">
-
-            <div>
-
-              <span className="section-kicker">
-                MODEL 1
-              </span>
-
-              <h2>
-                Current Herd Risk Distribution
-              </h2>
-
-            </div>
-
-            <span className="section-note">
-              Individual current-risk predictions
-            </span>
-
-          </div>
-
-
-          <div className="distribution-card">
-
-            <div className="distribution-bars">
-
-              <RiskDistribution
-                label="No Risk"
-                count={herdData?.no_risk_count}
-                total={herdData?.total_cows}
-                className="distribution-safe"
-              />
-
-              <RiskDistribution
-                label="Low Risk"
-                count={herdData?.low_risk_count}
-                total={herdData?.total_cows}
-                className="distribution-low"
-              />
-
-              <RiskDistribution
-                label="Moderate Risk"
-                count={herdData?.moderate_risk_count}
-                total={herdData?.total_cows}
-                className="distribution-moderate"
-              />
-
-              <RiskDistribution
-                label="High Risk"
-                count={herdData?.high_risk_count}
-                total={herdData?.total_cows}
-                className="distribution-high"
-              />
-
-            </div>
-
-
-            <div className="distribution-footer">
-
-              <div>
-
-                <strong>
-                  Maximum current risk:
-                </strong>{" "}
-
-                {formatPercentage(
-                  herdData?.maximum_risk
-                )}
-
-              </div>
-
-
-              <div>
-
-                <strong>
-                  Median current risk:
-                </strong>{" "}
-
-                {formatPercentage(
-                  herdData?.median_risk
-                )}
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* =========================
-            HERD RISK FORECAST
-        ========================== */}
-
-        <section className="section">
-
-          <div className="section-heading">
-
-            <div>
-
-              <span className="section-kicker">
-                MODEL 2
-              </span>
-
-              <h2>
-                Herd Risk Forecast
-              </h2>
-
-              <p className="section-description">
-                Future herd outlook aggregated from individual cow
-                forecasting results.
-              </p>
-
-            </div>
-
-
-            <div className="forecast-badge">
-
-              <TrendingUp size={16} />
-
-              AI Forecast
-
-            </div>
-
-          </div>
-
-
-          <div className="forecast-grid">
-
-            <ForecastCard
-              title="7-Day Warning"
-              value={formatPercentage(
-                herdData?.warning_7d_percentage
-              )}
-              subtitle={`${herdData?.warning_7d_count ?? "--"} cows with elevated 7-day probability`}
-              probability={
-                herdData?.average_7d_probability
-              }
-            />
-
-
-            <ForecastCard
-              title="14-Day Warning"
-              value={formatPercentage(
-                herdData?.warning_14d_percentage
-              )}
-              subtitle={`${herdData?.warning_14d_count ?? "--"} cows with elevated 14-day probability`}
-              probability={
-                herdData?.average_14d_probability
-              }
-            />
-
-
-            <ForecastCard
-              title="Average 7-Day Probability"
-              value={formatPercentage(
-                herdData?.average_7d_probability
-              )}
-              subtitle="Average forecast probability across the herd"
-              probability={
-                herdData?.average_7d_probability
-              }
-            />
-
-
-            <ForecastCard
-              title="Average 14-Day Probability"
-              value={formatPercentage(
-                herdData?.average_14d_probability
-              )}
-              subtitle="Average longer-term forecast probability"
-              probability={
-                herdData?.average_14d_probability
-              }
-            />
-
-          </div>
-
-
-          <div className="forecast-explanation">
-
-            <div className="explanation-icon">
-              <TrendingUp size={20} />
-            </div>
-
-            <div>
-
-              <strong>
-                How to interpret this forecast
-              </strong>
-
-              <p>
-                Model 1 estimates a cow's current mastitis risk.
-                Model 2 analyzes the cow's historical risk trajectory
-                to estimate future probability. Herd forecast values
-                summarize those individual forecasts.
-              </p>
-
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* =========================
-            PRIORITY COWS
-        ========================== */}
-
-        <section
-          className="section"
-          id="priority-section"
-        >
-
-          <div className="section-heading">
-
-            <div>
-
-              <span className="section-kicker">
-                PRIORITIZATION
-              </span>
-
-              <h2>
-                Priority Cows
-              </h2>
-
-              <p className="section-description">
-                Animals requiring the closest attention based on current
-                risk and future probability.
-              </p>
-
-            </div>
-
-
-            <div className="priority-summary">
-
-              <AlertTriangle size={16} />
-
-              {priorityData?.priority_cows?.length ?? 0} priority
-              animals
-
-            </div>
-
-          </div>
-
-
-          <div className="table-toolbar">
-
-            <div className="search-box">
-
-              <Search size={17} />
-
-              <input
-                type="text"
-                placeholder="Search by Cow ID..."
-                value={searchTerm}
-                onChange={(event) =>
-                  setSearchTerm(event.target.value)
-                }
-              />
-
-            </div>
-
-
-            <div className="filter-group">
-
-              {[
-                "ALL",
-                "HIGH RISK",
-                "MODERATE RISK",
-                "LOW RISK",
-              ].map((filter) => (
-
-                <button
-                  key={filter}
-                  className={
-                    riskFilter === filter
-                      ? "filter-button active"
-                      : "filter-button"
-                  }
-                  onClick={() =>
-                    setRiskFilter(filter)
-                  }
-                >
-
-                  {filter === "ALL"
-                    ? "All"
-                    : filter
-                      .replace(" RISK", "")
-                      .toLowerCase()
-                      .replace(/^./, (char) =>
-                        char.toUpperCase()
-                      )}
-
+        {/* SETTINGS MODAL FOR 7 INDIAN LANGUAGES */}
+        {isSettingsOpen && (
+          <div className="modal-overlay" onClick={() => setIsSettingsOpen(false)}>
+            <div className="modal-card glassmorphism" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>{t.settings_title}</h3>
+                <button className="close-btn" onClick={() => setIsSettingsOpen(false)}>
+                  <X size={20} />
                 </button>
-
-              ))}
-
-            </div>
-
-          </div>
-
-
-          <div className="table-card">
-
-            {priorityCows.length === 0 ? (
-
-              <div className="empty-state">
-
-                <Search size={25} />
-
-                <strong>
-                  No matching cows
-                </strong>
-
-                <span>
-                  Try changing the search or risk filter.
-                </span>
-
               </div>
 
-            ) : (
-
-              <div className="table-wrapper">
-
-                <table>
-
-                  <thead>
-
-                    <tr>
-                      <th>COW</th>
-                      <th>CURRENT RISK</th>
-                      <th>CATEGORY</th>
-                      <th>TREND</th>
-                      <th>7-DAY FORECAST</th>
-                      <th>14-DAY FORECAST</th>
-                      <th>WARNING</th>
-                      <th>ACTION</th>
-                    </tr>
-
-                  </thead>
-
-
-                  <tbody>
-
-                    {priorityCows.map((cow) => {
-
-                      const trend = getTrend(cow);
-
-                      return (
-
-                        <tr key={cow.cow_id}>
-
-                          <td>
-
-                            <div className="cow-cell">
-
-                              <div className="cow-avatar">
-                                <HeartPulse size={16} />
-                              </div>
-
-                              <div>
-
-                                <strong>
-                                  {cow.cow_id}
-                                </strong>
-
-                                <span>
-                                  Individual AI profile
-                                </span>
-
-                              </div>
-
-                            </div>
-
-                          </td>
-
-
-                          <td>
-
-                            <div className="risk-number">
-                              {formatPercentage(
-                                cow.current_risk
-                              )}
-                            </div>
-
-                          </td>
-
-
-                          <td>
-
-                            <span
-                              className={`risk-pill ${getRiskClass(
-                                cow.risk_category
-                              )}`}
-                            >
-
-                              {getRiskIcon(
-                                cow.risk_category
-                              )}
-
-                              {cow.risk_category ||
-                                "Unknown"}
-
-                            </span>
-
-                          </td>
-
-
-                          <td>
-
-                            <span
-                              className={`trend-pill ${trend.className}`}
-                            >
-
-                              {trend.icon}
-
-                              {trend.label}
-
-                            </span>
-
-                          </td>
-
-
-                          <td>
-
-                            <div className="forecast-cell">
-
-                              <strong>
-                                {formatPercentage(
-                                  cow["7d_probability"]
-                                )}
-                              </strong>
-
-                              {cow["7d_warning"] && (
-                                <span className="mini-warning">
-                                  Warning
-                                </span>
-                              )}
-
-                            </div>
-
-                          </td>
-
-
-                          <td>
-
-                            <div className="forecast-cell">
-
-                              <strong>
-                                {formatPercentage(
-                                  cow["14d_probability"]
-                                )}
-                              </strong>
-
-                              {cow["14d_warning"] && (
-                                <span className="mini-warning">
-                                  Warning
-                                </span>
-                              )}
-
-                            </div>
-
-                          </td>
-
-
-                          <td>
-
-                            {cow["7d_warning"] ||
-                              cow["14d_warning"] ? (
-
-                              <span className="warning-state">
-
-                                <AlertTriangle size={14} />
-
-                                Elevated
-
-                              </span>
-
-                            ) : (
-
-                              <span className="normal-state">
-
-                                <CheckCircle2 size={14} />
-
-                                No warning
-
-                              </span>
-
-                            )}
-
-                          </td>
-
-
-                          <td>
-
-                            <button
-                              className="action-button"
-                              title="Cow profile will be connected next"
-                            >
-                              Inspect
-                              <ChevronRight size={15} />
-                            </button>
-
-                          </td>
-
-                        </tr>
-
-                      );
-
-                    })}
-
-                  </tbody>
-
-                </table>
-
+              <div className="modal-body">
+                <label className="setting-label">{t.select_language}</label>
+                <div className="lang-grid">
+                  {[
+                    { code: "en", label: "English" },
+                    { code: "ta", label: "தமிழ் (Tamil)" },
+                    { code: "hi", label: "हिन्दी (Hindi)" },
+                    { code: "te", label: "తెలుగు (Telugu)" },
+                    { code: "ml", label: "മലയാളം (Malayalam)" },
+                    { code: "kn", label: "ಕನ್ನಡ (Kannada)" },
+                    { code: "mr", label: "मराठी (Marathi)" },
+                  ].map((item) => (
+                    <button
+                      key={item.code}
+                      className={`lang-option-btn ${lang === item.code ? "active" : ""}`}
+                      onClick={() => handleSetLang(item.code)}
+                    >
+                      <Globe size={16} />
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-            )}
-
-          </div>
-
-        </section>
-
-
-        {/* =========================
-            HIGH RISK COWS / ALERTS
-        ========================== */}
-
-        <section
-          className="section"
-          id="alerts-section"
-        >
-
-          <div className="section-heading">
-
-            <div>
-
-              <span className="section-kicker">
-                IMMEDIATE ATTENTION
-              </span>
-
-              <h2>
-                High-Risk Cows
-              </h2>
-
-              <p className="section-description">
-                Current Model 1 predictions above the backend's
-                high-risk threshold.
-              </p>
-
-            </div>
-
-          </div>
-
-
-          <div className="high-risk-grid">
-
-            {herdData?.high_risk_cows?.length > 0 ? (
-
-              herdData.high_risk_cows.map((cow) => (
-
-                <div
-                  className="high-risk-card"
-                  key={cow.cow_id}
-                >
-
-                  <div className="high-risk-card-header">
-
-                    <div className="cow-avatar danger">
-                      <HeartPulse size={17} />
-                    </div>
-
-                    <div>
-
-                      <strong>
-                        {cow.cow_id}
-                      </strong>
-
-                      <span>
-                        Current Model 1 prediction
-                      </span>
-
-                    </div>
-
-                    <AlertTriangle size={19} />
-
-                  </div>
-
-
-                  <div className="high-risk-value">
-                    {formatPercentage(
-                      cow.current_risk
-                    )}
-                  </div>
-
-
-                  <div className="high-risk-label">
-                    Current AI risk
-                  </div>
-
-
-                  <div className="high-risk-forecast-row">
-
-                    <div>
-
-                      <span>
-                        7-day
-                      </span>
-
-                      <strong>
-                        {formatPercentage(
-                          cow["7d_probability"]
-                        )}
-                      </strong>
-
-                    </div>
-
-
-                    <div>
-
-                      <span>
-                        14-day
-                      </span>
-
-                      <strong>
-                        {formatPercentage(
-                          cow["14d_probability"]
-                        )}
-                      </strong>
-
-                    </div>
-
-                  </div>
-
-
-                  <button className="inspect-card-button">
-
-                    Prioritize inspection
-
-                    <ChevronRight size={15} />
-
-                  </button>
-
-                </div>
-
-              ))
-
-            ) : (
-
-              <div className="no-high-risk">
-
-                <CheckCircle2 size={24} />
-
-                <div>
-
-                  <strong>
-                    No high-risk cows detected
-                  </strong>
-
-                  <span>
-                    Current Model 1 predictions are below the
-                    high-risk threshold.
-                  </span>
-
-                </div>
-
+              <div className="modal-footer">
+                <button className="save-btn" onClick={() => setIsSettingsOpen(false)}>
+                  {t.save_close}
+                </button>
               </div>
-
-            )}
-
-          </div>
-
-        </section>
-
-
-        {/* =========================
-            RECOMMENDATIONS
-        ========================== */}
-
-        <section className="section">
-
-          <div className="section-heading">
-
-            <div>
-
-              <span className="section-kicker">
-                DECISION SUPPORT
-              </span>
-
-              <h2>
-                Recommended Actions
-              </h2>
-
-              <p className="section-description">
-                AI-assisted monitoring recommendations. These are
-                decision-support suggestions, not medical diagnoses.
-              </p>
-
             </div>
-
           </div>
-
-
-          <div className="recommendation-list">
-
-            {herdData?.recommendations?.length > 0 ? (
-
-              herdData.recommendations.map(
-                (recommendation, index) => (
-
-                  <div
-                    className="recommendation-card"
-                    key={`${recommendation}-${index}`}
-                  >
-
-                    <div className="recommendation-icon">
-                      {getRecommendationIcon(
-                        recommendation
-                      )}
-                    </div>
-
-                    <div className="recommendation-content">
-
-                      <strong>
-
-                        {index === 0
-                          ? "Priority action"
-                          : index === 1
-                            ? "Monitoring action"
-                            : index === 2
-                              ? "Forecast review"
-                              : "Herd management review"}
-
-                      </strong>
-
-                      <p>
-                        {recommendation}
-                      </p>
-
-                    </div>
-
-                    <ChevronRight size={18} />
-
-                  </div>
-
-                )
-              )
-
-            ) : (
-
-              <div className="recommendation-card">
-
-                <div className="recommendation-icon">
-                  <ShieldCheck size={18} />
-                </div>
-
-                <div className="recommendation-content">
-
-                  <strong>
-                    Routine monitoring
-                  </strong>
-
-                  <p>
-                    No additional recommendations are currently
-                    available from the herd engine.
-                  </p>
-
-                </div>
-
-              </div>
-
-            )}
-
-          </div>
-
-        </section>
-
-
-        {/* =========================
-            DATA / SENSOR STATUS
-        ========================== */}
-
-        <section
-          className="section"
-          id="sensor-section"
-        >
-
-          <div className="section-heading">
-
-            <div>
-
-              <span className="section-kicker">
-                DATA PIPELINE
-              </span>
-
-              <h2>
-                Monitoring Infrastructure
-              </h2>
-
-              <p className="section-description">
-                Hardware integration is designed to feed animal and
-                environmental observations into the AI pipeline.
-              </p>
-
-            </div>
-
-          </div>
-
-
-          <div className="infrastructure-grid">
-
-            <InfrastructureCard
-              icon={<Wifi size={20} />}
-              title="ESP32"
-              subtitle="IoT controller"
-              status="Backend integration ready"
-            />
-
-            <InfrastructureCard
-              icon={<Database size={20} />}
-              title="RFID"
-              subtitle="Animal identification"
-              status="Integration planned"
-            />
-
-            <InfrastructureCard
-              icon={<Thermometer size={20} />}
-              title="DHT11"
-              subtitle="Environmental temperature / humidity"
-              status="Integration planned"
-            />
-
-            <InfrastructureCard
-              icon={<Thermometer size={20} />}
-              title="DS18B20"
-              subtitle="Temperature sensor"
-              status="Integration planned"
-            />
-
-            <InfrastructureCard
-              icon={<Activity size={20} />}
-              title="MPU6050"
-              subtitle="Movement / activity signal"
-              status="Integration planned"
-            />
-
-            <InfrastructureCard
-              icon={<Droplets size={20} />}
-              title="Milk-quality sensor"
-              subtitle="Milk-quality-related signal"
-              status="Integration planned"
-            />
-
-          </div>
-
-
-          <div className="sensor-note">
-
-            <Database size={18} />
-
-            <p>
-              Sensor values are intentionally not fabricated in this
-              prototype dashboard. A sensor will only be shown as
-              connected when the backend provides an actual connection
-              state or reading.
-            </p>
-
-          </div>
-
-        </section>
-
-
-        {/* =========================
-            WORKFLOW
-        ========================== */}
-
-        <section className="section">
-
-          <div className="section-heading">
-
-            <div>
-
-              <span className="section-kicker">
-                SYSTEM WORKFLOW
-              </span>
-
-              <h2>
-                From Monitoring to Action
-              </h2>
-
-            </div>
-
-          </div>
-
-
-          <div className="workflow">
-
-            <WorkflowStep
-              number="01"
-              icon={<Wifi size={19} />}
-              title="Monitor"
-              description="Collect animal and environmental observations."
-            />
-
-            <div className="workflow-line"></div>
-
-            <WorkflowStep
-              number="02"
-              icon={<Activity size={19} />}
-              title="Detect"
-              description="Model 1 estimates current individual risk."
-            />
-
-            <div className="workflow-line"></div>
-
-            <WorkflowStep
-              number="03"
-              icon={<TrendingUp size={19} />}
-              title="Forecast"
-              description="Model 2 estimates future risk probability."
-            />
-
-            <div className="workflow-line"></div>
-
-            <WorkflowStep
-              number="04"
-              icon={<AlertTriangle size={19} />}
-              title="Prioritize"
-              description="Rank animals requiring closer attention."
-            />
-
-            <div className="workflow-line"></div>
-
-            <WorkflowStep
-              number="05"
-              icon={<ShieldCheck size={19} />}
-              title="Act"
-              description="Support timely inspection and herd management."
-            />
-
-          </div>
-
-        </section>
-
-
-        {/* =========================
-            FUTURE INTEGRATION
-        ========================== */}
-
-        <section className="section">
-
-          <div className="future-card">
-
-            <div className="future-icon">
-              <Cloud size={23} />
-            </div>
-
-            <div className="future-content">
-
-              <span className="section-kicker">
-                FUTURE INTEGRATION
-              </span>
-
-              <h2>
-                Designed to scale beyond the MVP
-              </h2>
-
-              <p>
-                The architecture can later incorporate additional
-                farm records, laboratory results, SCC measurements,
-                mobile alerts, multilingual interfaces, cloud
-                deployment, GIS-based herd insights and additional
-                wearable or IoT signals.
-              </p>
-
-            </div>
-
-
-            <div className="future-tags">
-
-              <span>Planned</span>
-              <span>IoT</span>
-              <span>Mobile</span>
-              <span>Cloud</span>
-
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* =========================
-            DISCLAIMER
-        ========================== */}
-
-        <footer className="dashboard-footer">
-
-          <div className="footer-brand">
-
-            <HeartPulse size={17} />
-
-            <strong>
-              Mastitis AI
-            </strong>
-
-          </div>
-
-
-          <p>
-            Prototype decision-support system. AI risk percentages
-            are model predictions and should not be interpreted as
-            confirmed clinical diagnoses. Veterinary assessment
-            remains necessary when clinical signs are present.
-          </p>
-
-
-          <div className="footer-message">
-
-            <Leaf size={15} />
-
-            Early detection • Better monitoring • Smarter dairy management
-
-          </div>
-
-        </footer>
-
+        )}
       </main>
-
     </div>
   );
 }
-
-
-/* ============================================================
-   USER ICON
-============================================================ */
-
-function UserIcon() {
-
-  return (
-    <Users size={16} />
-  );
-}
-
-
-/* ============================================================
-   RISK DISTRIBUTION
-============================================================ */
-
-function RiskDistribution({
-  label,
-  count,
-  total,
-  className,
-}) {
-
-  const safeCount = Number(count || 0);
-  const safeTotal = Number(total || 0);
-
-  const percentage =
-    safeTotal > 0
-      ? (safeCount / safeTotal) * 100
-      : 0;
-
-  return (
-
-    <div className="distribution-item">
-
-      <div className="distribution-item-header">
-
-        <div className="distribution-label">
-
-          <span
-            className={`distribution-dot ${className}`}
-          ></span>
-
-          {label}
-
-        </div>
-
-        <strong>
-          {safeCount}
-        </strong>
-
-      </div>
-
-
-      <div className="distribution-track">
-
-        <div
-          className={`distribution-fill ${className}`}
-          style={{
-            width: `${Math.max(
-              percentage,
-              safeCount > 0 ? 1 : 0
-            )}%`,
-          }}
-        ></div>
-
-      </div>
-
-
-      <span className="distribution-percentage">
-
-        {percentage.toFixed(1)}% of herd
-
-      </span>
-
-    </div>
-  );
-}
-
-
-/* ============================================================
-   FORECAST CARD
-============================================================ */
-
-function ForecastCard({
-  title,
-  value,
-  subtitle,
-  probability,
-}) {
-
-  const numericProbability =
-    Number(probability || 0);
-
-  return (
-
-    <div className="forecast-card">
-
-      <div className="forecast-card-header">
-
-        <span>
-          {title}
-        </span>
-
-        <div className="forecast-card-icon">
-          <TrendingUp size={18} />
-        </div>
-
-      </div>
-
-
-      <div className="forecast-value">
-        {value}
-      </div>
-
-
-      <div className="forecast-progress">
-
-        <div
-          className="forecast-progress-fill"
-          style={{
-            width: `${Math.min(
-              Math.max(
-                numericProbability,
-                0
-              ),
-              100
-            )}%`,
-          }}
-        ></div>
-
-      </div>
-
-
-      <p>
-        {subtitle}
-      </p>
-
-    </div>
-  );
-}
-
-
-/* ============================================================
-   INFRASTRUCTURE CARD
-============================================================ */
-
-function InfrastructureCard({
-  icon,
-  title,
-  subtitle,
-  status,
-}) {
-
-  return (
-
-    <div className="infrastructure-card">
-
-      <div className="infrastructure-icon">
-        {icon}
-      </div>
-
-
-      <div className="infrastructure-info">
-
-        <strong>
-          {title}
-        </strong>
-
-        <span>
-          {subtitle}
-        </span>
-
-      </div>
-
-
-      <div className="infrastructure-status">
-
-        <span className="planned-dot"></span>
-
-        {status}
-
-      </div>
-
-    </div>
-  );
-}
-
-
-/* ============================================================
-   WORKFLOW STEP
-============================================================ */
-
-function WorkflowStep({
-  number,
-  icon,
-  title,
-  description,
-}) {
-
-  return (
-
-    <div className="workflow-step">
-
-      <div className="workflow-number">
-        {number}
-      </div>
-
-      <div className="workflow-icon">
-        {icon}
-      </div>
-
-      <strong>
-        {title}
-      </strong>
-
-      <p>
-        {description}
-      </p>
-
-    </div>
-  );
-}
-
-
-export default App;

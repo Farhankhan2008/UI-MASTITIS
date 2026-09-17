@@ -24,4 +24,17 @@ def create_users_table():
     """)
 
     connection.commit()
+
+    # Seed default farmer account if table is empty
+    cursor = connection.execute("SELECT COUNT(*) FROM users")
+    count = cursor.fetchone()[0]
+    if count == 0:
+        from auth import hash_password
+        hashed = hash_password("farmer")
+        connection.execute(
+            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+            ("farmer", hashed, "farmer")
+        )
+        connection.commit()
+
     connection.close()

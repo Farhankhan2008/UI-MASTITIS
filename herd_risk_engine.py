@@ -471,7 +471,6 @@ def analyze_herd(cow_predictions):
 
     priority_cows = (
         priority_df
-        .head(10)
         .to_dict(
             orient="records"
         )

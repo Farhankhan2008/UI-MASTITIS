@@ -301,26 +301,18 @@ def build_herd_dataframe(cow_predictions):
             probability_14d >= 30.0
         )
 
-        rows.append({
+        row = dict(cow)
+        row["current_risk"] = current_risk
+        row["risk_category"] = category
+        row["7d_probability"] = probability_7d
+        row["14d_probability"] = probability_14d
+        row["7d_warning"] = bool(warning_7d)
+        row["14d_warning"] = bool(warning_14d)
+        row["risk_24h"] = float(cow.get("risk_24h", current_risk))
+        row["risk_48h"] = float(cow.get("risk_48h", current_risk))
+        row["risk_3d"] = float(cow.get("risk_3d", current_risk))
 
-            "cow_id": cow["cow_id"],
-
-            "current_risk": current_risk,
-
-            "risk_category": category,
-
-            "7d_probability": probability_7d,
-
-            "14d_probability": probability_14d,
-
-            "7d_warning": bool(
-                warning_7d
-            ),
-
-            "14d_warning": bool(
-                warning_14d
-            )
-        })
+        rows.append(row)
 
     return pd.DataFrame(rows)
 
@@ -471,7 +463,6 @@ def analyze_herd(cow_predictions):
 
     priority_cows = (
         priority_df
-        .head(10)
         .to_dict(
             orient="records"
         )

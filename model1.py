@@ -43,8 +43,6 @@ required_columns = [
     "environment_temperature_c",
     "milk_temperature_c",
     "humidity_percent",
-    "previous_mastitis",
-    "days_since_last_mastitis",
     "mastitis_today"
 ]
 
@@ -90,9 +88,7 @@ features = [
     "cow_activity",
     "environment_temperature_c",
     "milk_temperature_c",
-    "humidity_percent",
-    "previous_mastitis",
-    "days_since_last_mastitis"
+    "humidity_percent"
 ]
 
 target = "mastitis_today"

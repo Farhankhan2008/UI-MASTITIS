@@ -22,8 +22,8 @@ MODEL2_FILES = {
     "24h": os.path.join(BASE_DIR, "mastitis_model2_final_24h.pkl"),
     "48h": os.path.join(BASE_DIR, "mastitis_model2_final_48h.pkl"),
     "3d": os.path.join(BASE_DIR, "mastitis_model2_final_3d.pkl"),
-    "7d": os.path.join(BASE_DIR, "mastitis_model2_v4_7d.pkl"),
-    "14d": os.path.join(BASE_DIR, "mastitis_model2_v4_14d.pkl")
+    "7d": os.path.join(BASE_DIR, "mastitis_model2_final_7d.pkl"),
+    "14d": os.path.join(BASE_DIR, "mastitis_model2_final_14d.pkl")
 }
 
 
@@ -37,9 +37,7 @@ MODEL1_FEATURES = [
     "cow_activity",
     "environment_temperature_c",
     "milk_temperature_c",
-    "humidity_percent",
-    "previous_mastitis",
-    "days_since_last_mastitis"
+    "humidity_percent"
 ]
 
 

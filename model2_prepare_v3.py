@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore")
 # CONFIGURATION
 # ============================================================
 
-BASE_DIR = r"D:\Mastitis"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 MODEL1_DATASET = os.path.join(
     BASE_DIR,
@@ -39,9 +39,7 @@ MODEL1_FEATURES = [
     "cow_activity",
     "environment_temperature_c",
     "milk_temperature_c",
-    "humidity_percent",
-    "previous_mastitis",
-    "days_since_last_mastitis"
+    "humidity_percent"
 ]
 
 
