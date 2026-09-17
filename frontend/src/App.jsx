@@ -830,9 +830,9 @@ function App() {
 
               {lastUpdated
                 ? lastUpdated.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
                 : "--"}
 
             </div>
@@ -1242,11 +1242,11 @@ function App() {
                   {filter === "ALL"
                     ? "All"
                     : filter
-                        .replace(" RISK", "")
-                        .toLowerCase()
-                        .replace(/^./, (char) =>
-                          char.toUpperCase()
-                        )}
+                      .replace(" RISK", "")
+                      .toLowerCase()
+                      .replace(/^./, (char) =>
+                        char.toUpperCase()
+                      )}
 
                 </button>
 
@@ -1423,7 +1423,7 @@ function App() {
                           <td>
 
                             {cow["7d_warning"] ||
-                            cow["14d_warning"] ? (
+                              cow["14d_warning"] ? (
 
                               <span className="warning-state">
 
@@ -1683,10 +1683,10 @@ function App() {
                         {index === 0
                           ? "Priority action"
                           : index === 1
-                          ? "Monitoring action"
-                          : index === 2
-                          ? "Forecast review"
-                          : "Herd management review"}
+                            ? "Monitoring action"
+                            : index === 2
+                              ? "Forecast review"
+                              : "Herd management review"}
 
                       </strong>
 
