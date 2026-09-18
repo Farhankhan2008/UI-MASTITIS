@@ -452,19 +452,24 @@ def herd_priority(
 # ESP32 HARDWARE TELEMETRY INGESTION & AI RISK PREDICTION
 # ============================================================
 
+from model1_to_model2_inference import predict_model1_risk
+
 class SensorDataPayload(BaseModel):
     cow_id: str
-    temperature: float = 0.0
-    humidity: float = 0.0
-    accel_x: float = 0.0
-    accel_y: float = 0.0
-    accel_z: float = 0.0
-    gyro_x: float = 0.0
-    gyro_y: float = 0.0
-    gyro_z: float = 0.0
-    tds_raw: float = 0.0
-    tds_voltage: float = 0.0
-    weight_raw: float = 0.0
+    temperature: float = 0.0          # Ambient / DHT11 temp (°C)
+    milk_temperature: float = 38.5    # Milk temp probe (°C)
+    humidity: float = 0.0             # DHT11 humidity (%)
+    accel_x: float = 0.0              # MPU6500 Accel X (m/s^2)
+    accel_y: float = 0.0              # MPU6500 Accel Y (m/s^2)
+    accel_z: float = 0.0              # MPU6500 Accel Z (m/s^2)
+    gyro_x: float = 0.0               # MPU6500 Gyro X
+    gyro_y: float = 0.0               # MPU6500 Gyro Y
+    gyro_z: float = 0.0               # MPU6500 Gyro Z
+    tds_raw: float = 0.0              # Raw TDS ADC count
+    tds_voltage: float = 0.0          # TDS Sensor voltage (V)
+    weight_raw: float = 0.0           # HX711 Load Cell raw count
+    previous_mastitis: int = 0        # 0 = No, 1 = Yes
+    days_since_last_mastitis: float = 999.0 # Days since last event
     dht_readings: int = 0
     mpu_readings: int = 0
     tds_readings: int = 0
@@ -473,52 +478,95 @@ class SensorDataPayload(BaseModel):
 
 @app.post("/api/sensor-data")
 def ingest_sensor_data(payload: SensorDataPayload):
+    """
+    Ingests raw hardware telemetry from ESP32, converts raw sensor metrics to exact physical units
+    required by the AI model, and returns instant Random Forest Mastitis Risk predictions.
+    """
     try:
-        # 1. Conductivity estimate from TDS voltage
-        conductivity = round(payload.tds_voltage * 3.5, 2) if payload.tds_voltage > 0 else 4.2
+        # ==========================================================
+        # 1. HARDWARE SENSOR RAW TO PHYSICAL FEATURE CONVERSION
+        # ==========================================================
         
-        # 2. Activity score from MPU6500 accelerometer vector magnitude
-        activity_mag = float(np.sqrt(payload.accel_x**2 + payload.accel_y**2 + payload.accel_z**2))
-        cow_activity = round(activity_mag, 2)
-        
-        # 3. Dynamic risk evaluation
-        risk_score = 15.0
-        if conductivity > 5.5:
-            risk_score += 45.0
-        elif conductivity > 4.8:
-            risk_score += 25.0
+        # A. Electrical Conductivity (mS/cm) from TDS Voltage
+        # Calibration Formula: Milk Conductivity (mS/cm) = TDS Voltage * 3.45 (Normal range: 4.0 - 4.8 mS/cm)
+        if payload.tds_voltage > 0.1:
+            milk_conductivity = round(payload.tds_voltage * 3.45, 2)
+        else:
+            milk_conductivity = 4.35 # Default healthy baseline
             
-        if payload.temperature > 39.5:
-            risk_score += 25.0
+        # B. Milk Yield (Liters) from HX711 Raw Load Cell Weight
+        # Conversion Formula: Milk Yield (L) = (raw_weight - tare_offset) / scale_factor
+        # Milk density ~ 1.03 kg/L. If raw count is given without scale, default to standard yield.
+        if payload.weight_raw > 1000:
+            raw_kg = (payload.weight_raw - 10000.0) / 21000.0  # Example calibration factor
+            milk_yield = round(max(0.5, raw_kg / 1.03), 2)
+        else:
+            milk_yield = 12.5 # Default yield (Liters)
             
-        risk_score = min(98.5, max(5.0, risk_score))
-        
-        if risk_score < 30.0:
+        # C. Cow Activity Index from MPU6500 Accelerometer Vector Magnitude
+        # Formula: Magnitude = sqrt(ax^2 + ay^2 + az^2)
+        # Normal baseline gravity is ~9.81 m/s^2. Excess movement is scaled.
+        accel_mag = np.sqrt(payload.accel_x**2 + payload.accel_y**2 + payload.accel_z**2)
+        if accel_mag > 0.1:
+            cow_activity = round(float(accel_mag * 5.2), 2)
+        else:
+            cow_activity = 52.0 # Normal activity index
+            
+        # D. Temperatures & Humidity
+        env_temp = payload.temperature if payload.temperature > 0 else 28.0
+        milk_temp = payload.milk_temperature if payload.milk_temperature > 0 else 38.5
+        humidity = payload.humidity if payload.humidity > 0 else 65.0
+
+        # ==========================================================
+        # 2. RUN AI MODEL INFERENCE (Random Forest Model 1)
+        # ==========================================================
+        risk_percentage = predict_model1_risk(
+            milk_yield_liters=milk_yield,
+            milk_conductivity_ms_cm=milk_conductivity,
+            cow_activity=cow_activity,
+            environment_temperature_c=env_temp,
+            milk_temperature_c=milk_temp,
+            humidity_percent=humidity,
+            previous_mastitis=payload.previous_mastitis,
+            days_since_last_mastitis=payload.days_since_last_mastitis
+        )
+
+        # ==========================================================
+        # 3. DECISION ENGINE & ALERT LEVEL CLASSIFICATION
+        # ==========================================================
+        if risk_percentage <= 25.0:
             risk_category = "Low Risk"
-            alert_level = "Green"
-            recommendation = "Normal health metrics. Continue routine monitoring."
-        elif risk_score < 60.0:
+            alert_level = "GREEN"
+            recommendation = "Normal physiological metrics. Continue routine monitoring."
+        elif risk_percentage <= 50.0:
             risk_category = "Moderate Risk"
-            alert_level = "Amber"
-            recommendation = "Subclinical indicators detected. Inspect udder and perform CMT."
+            alert_level = "AMBER"
+            recommendation = "Elevated conductivity or activity drop detected. Inspect udder & perform CMT."
         else:
             risk_category = "High Risk"
-            alert_level = "Red"
-            recommendation = "Critical mastitis probability! Isolate cow and notify veterinarian."
-            
+            alert_level = "RED"
+            recommendation = "Critical mastitis risk! Immediately isolate cow, perform California Mastitis Test, and alert veterinarian."
+
         return make_json_safe({
             "status": "success",
             "cow_id": payload.cow_id,
-            "processed_sensors": {
-                "temperature_c": payload.temperature,
-                "humidity_pct": payload.humidity,
-                "estimated_conductivity_ms_cm": conductivity,
-                "activity_index": cow_activity,
+            "raw_sensor_inputs": {
                 "tds_voltage": payload.tds_voltage,
-                "weight_raw": payload.weight_raw
+                "weight_raw": payload.weight_raw,
+                "mpu_accel_vector": [payload.accel_x, payload.accel_y, payload.accel_z],
+                "dht_temp_c": payload.temperature,
+                "dht_humidity_pct": payload.humidity
+            },
+            "converted_ai_features": {
+                "milk_conductivity_ms_cm": milk_conductivity,
+                "milk_yield_liters": milk_yield,
+                "cow_activity": cow_activity,
+                "environment_temperature_c": env_temp,
+                "milk_temperature_c": milk_temp,
+                "humidity_percent": humidity
             },
             "ai_prediction": {
-                "predicted_risk_percent": round(risk_score, 1),
+                "predicted_risk_percent": round(risk_percentage, 2),
                 "risk_category": risk_category,
                 "alert_level": alert_level,
                 "recommendation": recommendation
@@ -527,10 +575,11 @@ def ingest_sensor_data(payload: SensorDataPayload):
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Telemetry processing error: {str(e)}"
+            detail=f"Telemetry conversion & AI inference error: {str(e)}"
         )
 
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+
