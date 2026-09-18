@@ -20,6 +20,10 @@ from pydantic import BaseModel
 # ============================================================
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+if CURRENT_DIR not in sys.path:
+    sys.path.append(CURRENT_DIR)
 
 if BASE_DIR not in sys.path:
     sys.path.append(BASE_DIR)
@@ -442,3 +446,91 @@ def herd_priority(
             status_code=500,
             detail=str(e)
         )
+
+
+# ============================================================
+# ESP32 HARDWARE TELEMETRY INGESTION & AI RISK PREDICTION
+# ============================================================
+
+class SensorDataPayload(BaseModel):
+    cow_id: str
+    temperature: float = 0.0
+    humidity: float = 0.0
+    accel_x: float = 0.0
+    accel_y: float = 0.0
+    accel_z: float = 0.0
+    gyro_x: float = 0.0
+    gyro_y: float = 0.0
+    gyro_z: float = 0.0
+    tds_raw: float = 0.0
+    tds_voltage: float = 0.0
+    weight_raw: float = 0.0
+    dht_readings: int = 0
+    mpu_readings: int = 0
+    tds_readings: int = 0
+    hx711_readings: int = 0
+
+
+@app.post("/api/sensor-data")
+def ingest_sensor_data(payload: SensorDataPayload):
+    try:
+        # 1. Conductivity estimate from TDS voltage
+        conductivity = round(payload.tds_voltage * 3.5, 2) if payload.tds_voltage > 0 else 4.2
+        
+        # 2. Activity score from MPU6500 accelerometer vector magnitude
+        activity_mag = float(np.sqrt(payload.accel_x**2 + payload.accel_y**2 + payload.accel_z**2))
+        cow_activity = round(activity_mag, 2)
+        
+        # 3. Dynamic risk evaluation
+        risk_score = 15.0
+        if conductivity > 5.5:
+            risk_score += 45.0
+        elif conductivity > 4.8:
+            risk_score += 25.0
+            
+        if payload.temperature > 39.5:
+            risk_score += 25.0
+            
+        risk_score = min(98.5, max(5.0, risk_score))
+        
+        if risk_score < 30.0:
+            risk_category = "Low Risk"
+            alert_level = "Green"
+            recommendation = "Normal health metrics. Continue routine monitoring."
+        elif risk_score < 60.0:
+            risk_category = "Moderate Risk"
+            alert_level = "Amber"
+            recommendation = "Subclinical indicators detected. Inspect udder and perform CMT."
+        else:
+            risk_category = "High Risk"
+            alert_level = "Red"
+            recommendation = "Critical mastitis probability! Isolate cow and notify veterinarian."
+            
+        return make_json_safe({
+            "status": "success",
+            "cow_id": payload.cow_id,
+            "processed_sensors": {
+                "temperature_c": payload.temperature,
+                "humidity_pct": payload.humidity,
+                "estimated_conductivity_ms_cm": conductivity,
+                "activity_index": cow_activity,
+                "tds_voltage": payload.tds_voltage,
+                "weight_raw": payload.weight_raw
+            },
+            "ai_prediction": {
+                "predicted_risk_percent": round(risk_score, 1),
+                "risk_category": risk_category,
+                "alert_level": alert_level,
+                "recommendation": recommendation
+            }
+        })
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Telemetry processing error: {str(e)}"
+        )
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
